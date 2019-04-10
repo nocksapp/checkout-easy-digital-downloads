@@ -2,27 +2,15 @@
 
 Easy Digital Downloads Plugin for Nocks Checkout
 
-## Getting Started
+## Installation
 
-Download the source and upload the files to {project_dir}/wp-content/plugins/easy-digital-downloads/includes/gateways/nocks-checkout
+* Download the latest zip file from the [releases](https://github.com/nocksapp/checkout-easy-digital-downloads/releases) tab.
+* Upload the files to `{project_dir}/wp-content/plugins/easy-digital-downloads/includes/gateways/nocks-checkout`
+* Go to `{project_url}/wp-content/plugins/easy-digital-downloads/includes/gateways/nocks-checkout/install.php`
+* Go to Downloads -> Settings -> Gateways and configure the plugin.
+
+**Note that if you update Easy Digital Downloads, you need to repeat the installation steps!**
 
 ### Prerequisites
 
-Tested on Easy Digital Downloads 2.8.17 and 2.8.18
-
-### Installing
-
-Open your browser and browse to 
-```
-{project_url}/wp-content/plugins/easy-digital-downloads/includes/gateways/nocks-checkout/install.php
-``` 
-and follow the instructions.
-
-If everything went well, go to 
-```
-{project_url}/wp-admin/edit.php?post_type=download&page=edd-settings&tab=gateways
-```
-and fill in your API details and activate Nocks Checkout.
-
-
-**Note that if you update Easy Digital Downloads, you need to repeat the installation steps!**
+Tested on Easy Digital Downloads 2.9.12
