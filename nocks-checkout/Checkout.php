@@ -9,59 +9,78 @@ class Nocks_Checkout
 	/* @var Nocks_RestClient $client */
 	protected $client;
 
+	protected $merchantApiKey;
+
+	protected $testMode;
+
 	// Merchant Profile
 	protected $merchant_profile;
 
-	/* @var $apiEndpoint */
-	protected $apiEndpoint = "https://api.nocks.com/api/v2/";
-
-	/* @var $domain */
-	protected $domain = 'https://nocks.com/';
-
-	public function __construct($merchantApiKey, $merchantProfile) {
+	public function __construct($merchantApiKey, $merchantProfile, $testMode = null) {
 		$this->merchant_profile = $merchantProfile;
-		$this->client = new Nocks_RestClient($this->apiEndpoint, $merchantApiKey);
+		$this->testMode = $testMode === null ? edd_is_test_mode() : $testMode;
+
+		$this->merchantApiKey = $merchantApiKey;
+		$this->client = new Nocks_RestClient(self::getEndpoint($this->testMode), $this->merchantApiKey);
+
 		$curl_version = curl_version();
 		$this->addVersionString("PHP/" . phpversion());
 		$this->addVersionString("cURL/" . $curl_version["version"]);
 		$this->addVersionString($curl_version["ssl_version"]);
 	}
 
-	public function getMerchants() {
+	public static function getEndpoint($testMode = false) {
+		return $testMode ? 'https://sandbox.nocks.com/api/v2/' : 'https://api.nocks.com/api/v2/';
+	}
+
+	/**
+	 * @return array
+	 */
+	public function getTokenScopes() {
+		$endPoint = $this->testMode ? 'https://sandbox.nocks.com/oauth/' : 'https://www.nocks.com/oauth/';
+
+		$client = new Nocks_RestClient($endPoint, $this->merchantApiKey);
+
 		try {
-			$response = $this->client->get('merchant');
-			$merchants = array('' => '== Please Select ==');
+			$response = $client->get('token-scopes');
+
+			return json_decode($response, true);
+		} catch (Exception $e) {
+			return [];
+		}
+	}
+
+	/**
+	 * @param null $apiKey
+	 * @param null $testMode
+	 *
+	 * @return array
+	 */
+	public function getMerchants($apiKey = null, $testMode = null) {
+		try {
+			if ($apiKey !== null && $testMode !== null) {
+				$client = new Nocks_RestClient(self::getEndpoint($testMode), $apiKey);
+			} else {
+				$client = $this->client;
+			}
+
+			$response = $client->get('merchant');
+			$merchants = [];
 			$jsonObj = json_decode($response);
 			foreach ($jsonObj->data as $merchant) {
-
 				foreach ($merchant->merchant_profiles->data as $profile) {
 					$merchants[$profile->uuid] = $merchant->name . " : " . $profile->name;
 				}
 			}
-		} catch (\Exception $e) {
-			$merchants[] = "== Error, no API key ==";
+
+			return $merchants;
+		} catch (Exception $e) {
+			return [];
 		}
-
-		return $merchants;
-	}
-
-	public function getPaymentUrl($payment_id) {
-		return $this->domain.'payment/url/'.$payment_id;
 	}
 
 	public function addVersionString($string) {
 		$this->client->versionHeaders[] = $string;
-	}
-
-	public function getCurrentRate($currencyCode) {
-		$rate = 0;
-		$response = $this->client->get('http://api.nocks.com/api/market?call=nlg');
-		$response = json_decode($response, true);
-		if (isset($response['last'])) {
-			$rate = number_format($response['last'], 8);
-		}
-
-		return str_replace(',', '', $rate);
 	}
 
 	public function round_up ( $value, $precision ) {
@@ -69,6 +88,12 @@ class Nocks_Checkout
 		return ( ceil ( $pow * $value ) + ceil ( $pow * $value - ceil ( $pow * $value ) ) ) / $pow;
 	}
 
+	/**
+	 * @param $data
+	 *
+	 * @return array|mixed|null|object
+	 * @throws Exception
+	 */
 	public function createTransaction($data) {
 		$amount = $data['amount'];
 		$currency = $data['currency'];
@@ -77,30 +102,30 @@ class Nocks_Checkout
 
 		$post = array(
 			"merchant_profile" => $this->merchant_profile,
-			"source_currency"  => "NLG",
 			"amount"           => array(
 				"amount"   => (string)($currency==="NLG"?$this->round_up($amount, 8):$this->round_up($amount,2)),
 				"currency" => $currency
 			),
 			"payment_method"   => array(
-				"method" => "gulden",
+				"method" => $data['method'],
+				"metadata" => [
+					"issuer" => $data['issuer'],
+				]
 			),
 			"metadata"         => array(),
 			"redirect_url"     => $return_url,
 			"callback_url"     => $callback_url,
-			"locale"           => "nl_NL"
+			"locale"           => Nocks_Helper_Data::getCurrentLocale(),
 		);
+
+		if ($data['source_currency']) {
+			$post['source_currency'] = $data['source_currency'];
+		}
 
 		$response = ($this->client->post('transaction', null, $post));
 		$transaction = json_decode($response, true);
 
-		if (isset($transaction['data']['payments']["data"][0]['uuid'])) {
-			return $transaction;
-
-		} else {
-			return false;
-		}
-
+		return $transaction;
 	}
 
 	public function getTransaction($uuid) {
@@ -111,33 +136,34 @@ class Nocks_Checkout
 	}
 
 	/**
-	 * Calculates the price for the transaction
+	 * Get the ideal issuers
 	 *
-	 * @param $target_currency
-	 * @param $amount
-	 * @param $source_currency
-	 * @return array|int
+	 * @return array
 	 */
-	public function calculatePrice($target_currency, $amount, $source_currency) {
-		$data = array(
-			'source_currency'  => $source_currency,
-			'target_currency'  => $target_currency,
-			'merchant_profile' => $this->merchant_profile,
-			'amount'           => array(
-				"amount"   => (string)$amount,
-				"currency" => $target_currency
-			),
-			'payment_method'   => array("method" => "gulden")
-		);
+	public function getIdealIssuers() {
+		$transient_id = Nocks_Helper_Data::getTransientId('issuers_' . ( $this->testMode ? 'test' : 'live' ));
+		$cached_issuers = unserialize(get_transient($transient_id));
 
-		$price = $this->client->post('transaction/quote', null, $data);
-		$price = json_decode($price, true);
-
-		if (isset($price['data']) && isset($price['data'])) {
-			return $price['data'];
+		if (is_array($cached_issuers)) {
+			return $cached_issuers;
 		}
 
-		return 0;
-	}
+		try {
+			// Get fresh issuers
+			$response = ($this->client->get('settings', null));
+			$settings = json_decode($response, true);
+			$issuers = $settings['payment_methods']['ideal']['metadata']['issuers'];
 
+			try {
+				// Cache for a day
+				set_transient($transient_id, serialize($issuers), MINUTE_IN_SECONDS * 60 * 24);
+			} catch (Exception $e) {
+				return $issuers;
+			}
+
+			return $issuers;
+		} catch (Exception $e) {
+			return [];
+		}
+	}
 }
