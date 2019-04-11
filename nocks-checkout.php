@@ -3,7 +3,7 @@
 Plugin Name: Easy Digital Downloads - Nocks Checkout
 Plugin URL: http://nocks.com
 Description: An EDD gateway for Nocks Checkout
-Version: 1.1.0
+Version: 1.2.0
 Author: Nocks B.V.
 Author URI: http://nocks.com
 Contributors: spasma
@@ -123,6 +123,7 @@ function edd_nocks_checkout_process_payment($purchase_data) {
 			'issuer' => isset($_POST['nocks_ideal_issuer']) ? $_POST['nocks_ideal_issuer'] : '',
 			'webhookUrl' => $webhook_url,
 			'redirectUrl' => $return_url,
+            'reference' => $eddPaymentID,
 		]);
 
 		$transaction_id = $transaction['data']['uuid'];

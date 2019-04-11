@@ -101,21 +101,25 @@ class Nocks_Checkout
 		$return_url = $data['redirectUrl'];
 
 		$post = array(
-			"merchant_profile" => $this->merchant_profile,
-			"amount"           => array(
-				"amount"   => (string)($currency==="NLG"?$this->round_up($amount, 8):$this->round_up($amount,2)),
-				"currency" => $currency
+			'merchant_profile' => $this->merchant_profile,
+			'amount'           => array(
+				'amount'   => (string)($currency==="NLG"?$this->round_up($amount, 8):$this->round_up($amount,2)),
+				'currency' => $currency
 			),
-			"payment_method"   => array(
-				"method" => $data['method'],
-				"metadata" => [
-					"issuer" => $data['issuer'],
+			'payment_method'   => array(
+				'method' => $data['method'],
+				'metadata' => [
+					'issuer' => $data['issuer'],
 				]
 			),
-			"metadata"         => array(),
-			"redirect_url"     => $return_url,
-			"callback_url"     => $callback_url,
-			"locale"           => Nocks_Helper_Data::getCurrentLocale(),
+			'metadata'         => [
+				'nocks_plugin' => 'edd:1.2.0',
+				'edd_version' => EDD_VERSION,
+			],
+			'redirect_url'     => $return_url,
+			'callback_url'     => $callback_url,
+			'locale'           => Nocks_Helper_Data::getCurrentLocale(),
+			'description'      => $data['reference'] . ' - ' . get_bloginfo('name'),
 		);
 
 		if ($data['source_currency']) {
